@@ -72,12 +72,11 @@ scene_main_draw :: proc(s: ^Scene) {
 
 	// debug queuing
 	camera := __scene_main_make_camera(scene)
-	game_queue_debug_draw(Game_DebugDraw_Op_Rect{x = 1, y = 1, w = 20, h = 30, camera = camera})
 	game_queue_debug_draw(
 		Game_DebugDraw_Op_Circle {
 			x = scene.world_mouse_pos.x,
 			y = scene.world_mouse_pos.y,
-			r = 10,
+			r = 6.7,
 			color = rl.BLUE,
 			camera = camera,
 		},
@@ -172,8 +171,10 @@ __scene_main_move_target_mouse :: proc(s: ^SceneMain) {
 @(private = "file")
 __scene_main_sanity_checks :: proc(s: ^SceneMain) {
 	ZOOM_TRANSLATE_SPEED :: 11.67
+	ZOOM_MIN :: 0.1
+	ZOOM_MAX :: 80
 
-	s.look_zoom_target = clamp(s.look_zoom_target, 0.01, 100)
+	s.look_zoom_target = clamp(s.look_zoom_target, ZOOM_MIN, ZOOM_MAX)
 	s.look_zoom = linalg.lerp(
 		s.look_zoom,
 		s.look_zoom_target,
@@ -197,24 +198,62 @@ __scene_main_draw2d :: proc(s: ^SceneMain) {
 
 @(private = "file")
 __scene_main_draw2d_world_gizmo :: proc(s: ^SceneMain) {
-	LINE_THICK :: 3.67
-	LINE_THICK_HALF :: LINE_THICK / 2.0
-	LINE_DISTANCE :: 100
+	LINE_THICK_PIXELS :: 3.67
 
-	rl.DrawLineEx({-LINE_DISTANCE, 0}, {LINE_DISTANCE, 0}, LINE_THICK, rl.RED)
-	rl.DrawLineEx({0, -LINE_DISTANCE}, {0, LINE_DISTANCE}, LINE_THICK, rl.GREEN)
-	rl.DrawRectangleRec({-LINE_THICK_HALF, -LINE_THICK_HALF, LINE_THICK, LINE_THICK}, rl.BLUE)
+	tl, br := __scene_main_visible_bounds(s)
+	thick := LINE_THICK_PIXELS / s.look_zoom
+	thick_half := thick / 2.0
+
+	if tl.y <= 0 && br.y >= 0 {
+		rl.DrawLineEx({tl.x, 0}, {br.x, 0}, thick, rl.RED)
+	}
+	if tl.x <= 0 && br.x >= 0 {
+		rl.DrawLineEx({0, tl.y}, {0, br.y}, thick, rl.GREEN)
+	}
+	rl.DrawRectangleRec({-thick_half, -thick_half, thick, thick}, rl.BLUE)
 }
 
 @(private = "file")
 __scene_main_draw2d_world_grid :: proc(s: ^SceneMain) {
+	MIN_CELL_PIXELS :: 15.0
+	LINE_THICK_PIXELS :: 1.0
+	LINE_COLOR :: rl.Color{255, 255, 255, 40}
 
+	tl, br := __scene_main_visible_bounds(s)
+
+	cell: f32 = CST_CELL_SIZE
+	for cell * s.look_zoom < MIN_CELL_PIXELS {
+		cell *= 2
+	}
+
+	thick := LINE_THICK_PIXELS / s.look_zoom
+
+	x0 := int(math.floor(tl.x / cell))
+	x1 := int(math.ceil(br.x / cell))
+	y0 := int(math.floor(tl.y / cell))
+	y1 := int(math.ceil(br.y / cell))
+
+	for i in x0 ..= x1 {
+		x := f32(i) * cell
+		rl.DrawLineEx({x, tl.y}, {x, br.y}, thick, LINE_COLOR)
+	}
+	for j in y0 ..= y1 {
+		y := f32(j) * cell
+		rl.DrawLineEx({tl.x, y}, {br.x, y}, thick, LINE_COLOR)
+	}
 }
 
 
 @(private = "file")
 __scene_main_drawui :: proc(s: ^SceneMain) {
+	// ...
+}
 
+@(private = "file")
+__scene_main_visible_bounds :: proc(s: ^SceneMain) -> (tl, br: [2]f32) {
+	size := utils.window_size()
+	half := linalg.length(size) / 2.0 / s.look_zoom
+	return s.look_target - half, s.look_target + half
 }
 
 @(private = "file")
