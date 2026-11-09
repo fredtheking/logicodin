@@ -17,6 +17,7 @@ SceneMain :: struct {
 	look_zoom_target: f32,
 	look_rotation:    f32,
 	world_mouse_pos:  [2]f32,
+	obj_top_selector: ^Top_Selector,
 }
 
 scene_main_create :: proc() -> ^Scene {
@@ -32,6 +33,17 @@ scene_main_create :: proc() -> ^Scene {
 	scene.look_target = {}
 	scene.look_zoom = 1.0
 	scene.look_zoom_target = 1.0
+
+	scene.obj_top_selector = obj_top_selector_create(
+		{
+			{title = "wire", color = rl.LIGHTGRAY},
+			{title = "not", color = rl.RED},
+			{title = "and", color = rl.LIME},
+			{title = "or", color = rl.YELLOW},
+			{title = "xor", color = rl.ORANGE},
+			{title = "battery", color = rl.PURPLE},
+		},
+	)
 
 	return scene
 }
@@ -246,7 +258,7 @@ __scene_main_draw2d_world_grid :: proc(s: ^SceneMain) {
 
 @(private = "file")
 __scene_main_drawui :: proc(s: ^SceneMain) {
-	// ...
+	obj_top_selector_draw(s.obj_top_selector)
 }
 
 @(private = "file")

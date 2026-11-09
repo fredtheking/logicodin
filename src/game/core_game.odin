@@ -118,6 +118,7 @@ game_run :: proc(start_scene_tid: typeid) {
 		__game_draw()
 		deferred_flush(&g._debug_draw_ops, g, __game_drawdebug_deferred_flush)
 		rl.EndDrawing()
+		free_all(context.temp_allocator)
 	}
 	log.info("runtime ended")
 }
