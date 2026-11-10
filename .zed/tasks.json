@@ -1,0 +1,26 @@
+[
+  {
+    "label": "Build",
+    "command": "odin run build.odin",
+    "args": ["-file", "--keep-executable", "-out:.zed/build_executable"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+  {
+    "label": "Run",
+    "command": "odin run build.odin",
+    "args": [
+      "-file",
+      "--keep-executable",
+      "-out:.zed/build_executable",
+      "--",
+      "--run",
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+  },
+]
