@@ -1,4 +1,6 @@
-.zed/
+# .zed/  nah, lets keep it.
+.zed/build_executable
+
 .idea/
 
 bin/
