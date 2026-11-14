@@ -41,7 +41,7 @@ director_destroy :: proc(d: ^Director) {
 }
 
 director_dispatch :: proc(d: ^Director) {
-	deferred_flush(&d.deferred_ops, d, __director_deferred_flush)
+	deferred_flush(&d.deferred_ops, d, __deferred_flush)
 }
 
 director_register :: proc(d: ^Director, key: typeid, value: Scene_Creator_Proc) -> bool {
@@ -156,7 +156,7 @@ _director_given_tid_scene_invalid :: proc(tid: typeid) -> bool {
 }
 
 @(private = "file")
-__director_deferred_flush :: proc(d: ^Director, packed_op: Director_Op) {
+__deferred_flush :: proc(d: ^Director, packed_op: Director_Op) {
 	switch op in packed_op {
 	case Director_Op_Goto:
 		director_goto_now(d, op.tid)

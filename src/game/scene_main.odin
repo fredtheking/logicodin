@@ -29,7 +29,7 @@ scene_main_create :: proc() -> ^Scene {
 	scene.on_process = scene_main_process
 	scene.on_draw = scene_main_draw
 
-	__scene_main_update_look_offset_from_window_size(scene)
+	__update_look_offset_from_window_size(scene)
 	scene.look_target = {}
 	scene.look_zoom = 1.0
 	scene.look_zoom_target = 1.0
@@ -52,7 +52,7 @@ scene_main_dispatch :: proc(s: ^Scene) {
 	scene := cast(^SceneMain)s
 
 	if rl.IsWindowResized() {
-		__scene_main_update_look_offset_from_window_size(scene)
+		__update_look_offset_from_window_size(scene)
 	}
 }
 
@@ -67,28 +67,26 @@ scene_main_destroy :: proc(s: ^Scene) {
 scene_main_process :: proc(s: ^Scene) {
 	scene := cast(^SceneMain)s
 
-	__scene_main_move_target(scene)
-	scene.world_mouse_pos = rl.GetScreenToWorld2D(
-		utils.highdpi_mouse_pos(),
-		__scene_main_make_camera(scene),
-	)
+	__move_target(scene)
+	scene.world_mouse_pos = rl.GetScreenToWorld2D(utils.highdpi_mouse_pos(), __make_camera(scene))
 
-	__scene_main_sanity_checks(scene)
+	obj_top_selector_process(scene.obj_top_selector)
+
+	__sanity_checks(scene)
 }
 
 scene_main_draw :: proc(s: ^Scene) {
 	scene := cast(^SceneMain)s
 
-	__scene_main_draw2d(scene)
-	__scene_main_drawui(scene)
+	__draw2d(scene)
+	__drawui(scene)
 
 	// debug queuing
-	camera := __scene_main_make_camera(scene)
+	camera := __make_camera(scene)
 	game_queue_debug_draw(
 		Game_DebugDraw_Op_Circle {
-			x = scene.world_mouse_pos.x,
-			y = scene.world_mouse_pos.y,
-			r = 6.7,
+			pos = scene.world_mouse_pos,
+			radius = 6.7,
 			color = rl.BLUE,
 			camera = camera,
 		},
@@ -97,20 +95,20 @@ scene_main_draw :: proc(s: ^Scene) {
 
 
 @(private = "file")
-__scene_main_update_look_offset_from_window_size :: proc(s: ^SceneMain) {
+__update_look_offset_from_window_size :: proc(s: ^SceneMain) {
 	sizes := utils.window_size()
 
 	s.look_offset = sizes / 2.0
 }
 
 @(private = "file")
-__scene_main_move_target :: proc(s: ^SceneMain) {
-	__scene_main_move_target_keys(s)
-	__scene_main_move_target_mouse(s)
+__move_target :: proc(s: ^SceneMain) {
+	__move_target_keys(s)
+	__move_target_mouse(s)
 }
 
 @(private = "file")
-__scene_main_move_target_keys :: proc(s: ^SceneMain) {
+__move_target_keys :: proc(s: ^SceneMain) {
 	MOVE_SPEED :: 300
 	MOVE_SPRINT_MULTIPLIER :: 2.5
 	ZOOM_SPEED :: 0.4
@@ -153,7 +151,7 @@ __scene_main_move_target_keys :: proc(s: ^SceneMain) {
 
 	// apply
 	if move_vec != {} && zoom_add != 0.0 {
-		__scene_main_update_look_offset_from_window_size(s)
+		__update_look_offset_from_window_size(s)
 	}
 	deltatime := rl.GetFrameTime()
 	s.look_target += move_vec * MOVE_SPEED * deltatime
@@ -161,13 +159,13 @@ __scene_main_move_target_keys :: proc(s: ^SceneMain) {
 }
 
 @(private = "file")
-__scene_main_move_target_mouse :: proc(s: ^SceneMain) {
+__move_target_mouse :: proc(s: ^SceneMain) {
 	ZOOM_SPEED :: 13.67
 
 	// move
 	move_vec := [2]f32{}
 	if rl.IsMouseButtonDown(.MIDDLE) {
-		camera := __scene_main_make_camera(s)
+		camera := __make_camera(s)
 		move_vec = -rl.GetMouseDelta() / s.look_zoom * rl.GetWindowScaleDPI()
 	}
 
@@ -181,7 +179,7 @@ __scene_main_move_target_mouse :: proc(s: ^SceneMain) {
 }
 
 @(private = "file")
-__scene_main_sanity_checks :: proc(s: ^SceneMain) {
+__sanity_checks :: proc(s: ^SceneMain) {
 	ZOOM_TRANSLATE_SPEED :: 11.67
 	ZOOM_MIN :: 0.1
 	ZOOM_MAX :: 80
@@ -197,22 +195,22 @@ __scene_main_sanity_checks :: proc(s: ^SceneMain) {
 
 
 @(private = "file")
-__scene_main_draw2d :: proc(s: ^SceneMain) {
+__draw2d :: proc(s: ^SceneMain) {
 	g := game_get_singleton()
 
-	rl.BeginMode2D(__scene_main_make_camera(s))
-	__scene_main_draw2d_world_grid(s)
+	rl.BeginMode2D(__make_camera(s))
+	__draw2d_world_grid(s)
 	if g.debug_mode {
-		__scene_main_draw2d_world_gizmo(s)
+		__draw2d_world_gizmo(s)
 	}
 	rl.EndMode2D()
 }
 
 @(private = "file")
-__scene_main_draw2d_world_gizmo :: proc(s: ^SceneMain) {
+__draw2d_world_gizmo :: proc(s: ^SceneMain) {
 	LINE_THICK_PIXELS :: 3.67
 
-	tl, br := __scene_main_visible_bounds(s)
+	tl, br := __visible_bounds(s)
 	thick := LINE_THICK_PIXELS / s.look_zoom
 	thick_half := thick / 2.0
 
@@ -226,12 +224,12 @@ __scene_main_draw2d_world_gizmo :: proc(s: ^SceneMain) {
 }
 
 @(private = "file")
-__scene_main_draw2d_world_grid :: proc(s: ^SceneMain) {
+__draw2d_world_grid :: proc(s: ^SceneMain) {
 	MIN_CELL_PIXELS :: 15.0
 	LINE_THICK_PIXELS :: 1.0
 	LINE_COLOR :: rl.Color{255, 255, 255, 40}
 
-	tl, br := __scene_main_visible_bounds(s)
+	tl, br := __visible_bounds(s)
 
 	cell: f32 = CST_CELL_SIZE
 	for cell * s.look_zoom < MIN_CELL_PIXELS {
@@ -257,19 +255,19 @@ __scene_main_draw2d_world_grid :: proc(s: ^SceneMain) {
 
 
 @(private = "file")
-__scene_main_drawui :: proc(s: ^SceneMain) {
+__drawui :: proc(s: ^SceneMain) {
 	obj_top_selector_draw(s.obj_top_selector)
 }
 
 @(private = "file")
-__scene_main_visible_bounds :: proc(s: ^SceneMain) -> (tl, br: [2]f32) {
+__visible_bounds :: proc(s: ^SceneMain) -> (tl, br: [2]f32) {
 	size := utils.window_size()
 	half := linalg.length(size) / 2.0 / s.look_zoom
 	return s.look_target - half, s.look_target + half
 }
 
 @(private = "file")
-__scene_main_make_camera :: proc(s: ^SceneMain) -> rl.Camera2D {
+__make_camera :: proc(s: ^SceneMain) -> rl.Camera2D {
 	return {
 		offset = s.look_offset,
 		target = s.look_target,

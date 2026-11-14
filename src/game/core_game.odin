@@ -27,21 +27,23 @@ Game_Op :: union {
 }
 
 Game_DebugDraw_Op_Rect :: struct {
-	x, y, w, h: f32,
-	color:      Maybe(rl.Color),
-	camera:     Maybe(rl.Camera2D),
+	rect:   [4]f32,
+	color:  Maybe(rl.Color),
+	camera: Maybe(rl.Camera2D),
 }
 
 Game_DebugDraw_Op_Circle :: struct {
-	x, y, r: f32,
-	color:   Maybe(rl.Color),
-	camera:  Maybe(rl.Camera2D),
+	pos:    [2]f32,
+	radius: f32,
+	color:  Maybe(rl.Color),
+	camera: Maybe(rl.Camera2D),
 }
 
 Game_DebugDraw_Op_Line :: struct {
-	x1, y1, x2, y2, thickness: f32,
-	color:                     Maybe(rl.Color),
-	camera:                    Maybe(rl.Camera2D),
+	point1, point2: [2]f32,
+	thickness:      f32,
+	color:          Maybe(rl.Color),
+	camera:         Maybe(rl.Camera2D),
 }
 
 Game_DebugDraw_Op :: union {
@@ -53,6 +55,7 @@ Game_DebugDraw_Op :: union {
 Game ::  /* heavy */struct {
 	// managers
 	director:        ^Director,
+	inputter:        ^Inputter,
 	debug_mode:      bool,
 
 	// internal
@@ -65,10 +68,16 @@ Game ::  /* heavy */struct {
 __game_st: ^Game = nil
 
 game_init :: proc(desc: Game_Desc) -> bool {
+	if g := game_get_singleton(); g != nil {
+		log.error("game already initialised!")
+		return false
+	}
+
 	game := new(Game)
-	__game_init_rl(desc)
+	__init_rl(desc)
 
 	game.director = director_create()
+	game.inputter = inputter_create()
 	deferred_init(&game._deferred_ops)
 	deferred_init(&game._debug_draw_ops)
 
@@ -77,14 +86,26 @@ game_init :: proc(desc: Game_Desc) -> bool {
 }
 
 game_term :: proc() {
-	deferred_deinit(&__game_st._debug_draw_ops)
-	deferred_deinit(&__game_st._deferred_ops)
-	director_destroy(__game_st.director)
-	__game_st.director = nil
+	g: ^Game
+	if g = game_get_singleton(); g == nil {
+		log.error("game not initialised!")
+		return
+	}
 
-	__game_term_rl()
+	deferred_deinit(&g._debug_draw_ops)
+	deferred_deinit(&g._deferred_ops)
+	inputter_destroy(g.inputter)
+	g.inputter = nil
+	director_destroy(g.director)
+	g.director = nil
+
+	__term_rl()
 	free(__game_st)
 	__game_st = nil
+}
+
+game_get_singleton :: proc() -> ^Game {
+	return __game_st
 }
 
 
@@ -101,32 +122,28 @@ game_run :: proc(start_scene_tid: typeid) {
 
 	log.info("runtime started")
 	loop: for {
-		deferred_flush(&g._deferred_ops, g, __game_deferred_flush)
+		deferred_flush(&g._deferred_ops, g, __deferred_flush)
 
 		if rl.WindowShouldClose() do break loop
 		if g._should_close do break loop
 
 		// dispatch
-		__game_dispatch()
+		__dispatch()
 
 		// process/update everything
-		__game_process()
+		__process()
 
 		// draw
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.DARKGRAY)
-		__game_draw()
-		deferred_flush(&g._debug_draw_ops, g, __game_drawdebug_deferred_flush)
+		__draw()
+		deferred_flush(&g._debug_draw_ops, g, __drawdebug_deferred_flush)
 		rl.EndDrawing()
 		free_all(context.temp_allocator)
 	}
 	log.info("runtime ended")
 }
 
-
-game_get_singleton :: proc() -> ^Game {
-	return __game_st
-}
 
 game_is_debug :: proc() -> bool {
 	if g := game_get_singleton(); g != nil {
@@ -170,7 +187,7 @@ game_close_now :: proc() {
 
 
 @(private = "file")
-__game_deferred_flush :: proc(g: ^Game, packed_op: Game_Op) {
+__deferred_flush :: proc(g: ^Game, packed_op: Game_Op) {
 	switch op in packed_op {
 	case Game_Op_Close:
 		game_close_now()
@@ -178,7 +195,7 @@ __game_deferred_flush :: proc(g: ^Game, packed_op: Game_Op) {
 }
 
 @(private = "file")
-__game_drawdebug_deferred_flush :: proc(g: ^Game, packed_op: Game_DebugDraw_Op) {
+__drawdebug_deferred_flush :: proc(g: ^Game, packed_op: Game_DebugDraw_Op) {
 	get_color :: proc(color: Maybe(rl.Color)) -> rl.Color {
 		DEFAULT_COLOR :: rl.RED
 
@@ -190,17 +207,17 @@ __game_drawdebug_deferred_flush :: proc(g: ^Game, packed_op: Game_DebugDraw_Op) 
 	switch op in packed_op {
 	case Game_DebugDraw_Op_Rect:
 		color := get_color(op.color)
-		rect := rl.Rectangle{op.x, op.y, op.w, op.h}
+		rect := transmute(rl.Rectangle)op.rect
 
 		if camera, ok := op.camera.?; ok {
 			dpi := rl.GetWindowScaleDPI()
-			pos := rl.GetWorldToScreen2D({op.x, op.y}, camera)
+			pos := rl.GetWorldToScreen2D(op.rect.xy, camera)
 
 			screen_rect := rl.Rectangle {
 				x      = pos.x / dpi.x,
 				y      = pos.y / dpi.y,
-				width  = op.w * camera.zoom / dpi.x,
-				height = op.h * camera.zoom / dpi.y,
+				width  = op.rect.z * camera.zoom / dpi.x,
+				height = op.rect.w * camera.zoom / dpi.y,
 			}
 			rl.DrawRectanglePro(screen_rect, {}, camera.rotation, color)
 		} else {
@@ -211,19 +228,19 @@ __game_drawdebug_deferred_flush :: proc(g: ^Game, packed_op: Game_DebugDraw_Op) 
 
 		if camera, ok := op.camera.?; ok {
 			dpi := rl.GetWindowScaleDPI()
-			pos := rl.GetWorldToScreen2D({op.x, op.y}, camera)
+			pos := rl.GetWorldToScreen2D(op.pos, camera)
 
-			rl.DrawCircleV({pos.x / dpi.x, pos.y / dpi.y}, op.r * camera.zoom / dpi.x, color)
+			rl.DrawCircleV({pos.x / dpi.x, pos.y / dpi.y}, op.radius * camera.zoom / dpi.x, color)
 		} else {
-			rl.DrawCircleV({op.x, op.y}, op.r, color)
+			rl.DrawCircleV(op.pos, op.radius, color)
 		}
 	case Game_DebugDraw_Op_Line:
 		color := get_color(op.color)
 
 		if camera, ok := op.camera.?; ok {
 			dpi := rl.GetWindowScaleDPI()
-			p1 := rl.GetWorldToScreen2D({op.x1, op.y1}, camera)
-			p2 := rl.GetWorldToScreen2D({op.x2, op.y2}, camera)
+			p1 := rl.GetWorldToScreen2D(op.point1, camera)
+			p2 := rl.GetWorldToScreen2D(op.point2, camera)
 
 			rl.DrawLineEx(
 				{p1.x / dpi.x, p1.y / dpi.y},
@@ -232,15 +249,16 @@ __game_drawdebug_deferred_flush :: proc(g: ^Game, packed_op: Game_DebugDraw_Op) 
 				color,
 			)
 		} else {
-			rl.DrawLineEx({op.x1, op.y1}, {op.x2, op.y2}, op.thickness, color)
+			rl.DrawLineEx(op.point1, op.point2, op.thickness, color)
 		}
 	}
 }
 
 @(private = "file")
-__game_dispatch :: proc() {
+__dispatch :: proc() {
 	g := game_get_singleton()
 
+	inputter_dispatch(g.inputter)
 	director_dispatch(g.director)
 
 	director_dispatch_overlay(g.director)
@@ -248,7 +266,7 @@ __game_dispatch :: proc() {
 }
 
 @(private = "file")
-__game_process :: proc() {
+__process :: proc() {
 	g := game_get_singleton()
 
 	director_process_current(g.director)
@@ -256,7 +274,7 @@ __game_process :: proc() {
 }
 
 @(private = "file")
-__game_draw :: proc() {
+__draw :: proc() {
 	g := game_get_singleton()
 
 	director_draw_current(g.director)
@@ -264,7 +282,7 @@ __game_draw :: proc() {
 }
 
 @(private = "file")
-__game_init_rl :: proc(desc: Game_Desc) {
+__init_rl :: proc(desc: Game_Desc) {
 	rl.SetConfigFlags(desc.flags)
 	rl.InitWindow(
 		desc.width,
@@ -276,7 +294,7 @@ __game_init_rl :: proc(desc: Game_Desc) {
 }
 
 @(private = "file")
-__game_term_rl :: proc() {
+__term_rl :: proc() {
 	rl.CloseAudioDevice()
 	rl.CloseWindow()
 }

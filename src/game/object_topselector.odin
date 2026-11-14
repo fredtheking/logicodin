@@ -1,6 +1,5 @@
 package game
 
-import "core:log"
 import "core:strings"
 
 import "utils"
@@ -8,12 +7,17 @@ import "utils"
 import rl "vendor:raylib"
 
 
-TOP_SEL_SPACING: f32 : 10.0
 TOP_SEL_PADDING :: [2]f32{20.0, 20.0}
+TOP_SEL_SPACING: f32 : 10.0
+TOP_SEL_ARROW :: "V"
 
 
 Top_Selector ::  /* heavy */struct {
-	options: [dynamic]^Top_Selector_Option,
+	options:      [dynamic]^Top_Selector_Option,
+	arrow_hitbox: ^Hitbox,
+
+	// internal
+	_pos:         [2]f32,
 }
 
 obj_top_selector_create :: proc(option_descs: []Top_Selector_Option_Desc) -> ^Top_Selector {
@@ -24,10 +28,14 @@ obj_top_selector_create :: proc(option_descs: []Top_Selector_Option_Desc) -> ^To
 		append(&selector.options, obj_top_selector_option_create(option_desc))
 	}
 
+	arrow_size := __measure_text(TOP_SEL_ARROW) + TOP_SEL_OPT_PADDING + CST_GUI_THICKNESS
+	selector.arrow_hitbox = obj_hitbox_create({0.0, 0.0, arrow_size.x, arrow_size.y})
+
 	return selector
 }
 
 obj_top_selector_destroy :: proc(s: ^Top_Selector) {
+	obj_hitbox_destroy(s.arrow_hitbox)
 	for option in s.options {
 		obj_top_selector_option_destroy(option)
 	}
@@ -37,73 +45,37 @@ obj_top_selector_destroy :: proc(s: ^Top_Selector) {
 }
 
 
+obj_top_selector_process :: proc(s: ^Top_Selector) {
+	if s._pos == {} || rl.IsWindowResized() {
+		s._pos.x = (utils.window_size(true) / 2.0 - obj_top_selector_get_size(s) / 2.0).x
+		s._pos.y = 0.0
+	}
+}
+
 obj_top_selector_draw :: proc(s: ^Top_Selector) {
-	ARROW_WIDTH :: 100
+	size := obj_top_selector_get_size(s)
+	options_size := obj_top_selector_get_options_size(s)
+	options_startpos := (size - options_size) / 2
 
-	size := obj_top_selector_get_options_sizes(s)
-	center_x := utils.window_size(ignore_highdpi = true).x / 2.0
+	rect := transmute(rl.Rectangle)[4]f32{s._pos.x, s._pos.y, size.x, size.y}
 
-	// arrow
-	arrow_pos_x := center_x - ARROW_WIDTH / 2.0
-	arrow_box := rl.Rectangle {
-		arrow_pos_x,
-		size.y + TOP_SEL_PADDING.y - CST_GUI_THICKNESS,
-		ARROW_WIDTH,
-		size.y,
-	}
+	rl.DrawRectangleRec(rect, rl.BLACK)
+	rl.DrawRectangleLinesEx(rect, CST_GUI_THICKNESS, rl.WHITE)
 
-	rl.DrawRectangleRec(arrow_box, rl.BLACK)
-	rl.DrawRectangleLinesEx(arrow_box, CST_GUI_THICKNESS, rl.WHITE)
-
-	// options box
-	pos_x := center_x - size.x / 2.0 - TOP_SEL_SPACING // have no idea why but this spacing fixes spacing :D
-	padded_size := size + TOP_SEL_PADDING
-	options_box := rl.Rectangle{pos_x, 0.0, padded_size.x, padded_size.y}
-
-	rl.DrawRectangleRec(options_box, rl.BLACK)
-	rl.DrawRectangleLinesEx(options_box, CST_GUI_THICKNESS, rl.WHITE)
-
-	x: f32 = pos_x + TOP_SEL_PADDING.x / 2.0
 	for option in s.options {
-		obj_top_selector_option_draw(option, {x, TOP_SEL_PADDING.y / 2.0})
-		x += obj_top_selector_option_get_boxsize(option).x + TOP_SEL_SPACING
+		obj_top_selector_option_draw(option, s._pos + options_startpos)
+		options_startpos.x += obj_top_selector_option_get_size(option).x + TOP_SEL_SPACING
 	}
 
-	// arrow line finish
-	rl.DrawRectangleRec(
-		{
-			arrow_box.x + CST_GUI_THICKNESS,
-			arrow_box.y,
-			arrow_box.width - CST_GUI_THICKNESS * 2,
-			CST_GUI_THICKNESS,
-		},
-		rl.BLACK,
-	)
-	arrow: string = "V"
-	measured_arrow := rl.MeasureTextEx(
-		rl.GetFontDefault(),
-		strings.clone_to_cstring(arrow, context.temp_allocator),
-		TOP_SEL_OPT_FONT_SIZE,
-		TOP_SEL_OPT_FONT_SPACING,
-	)
-	rl.DrawTextCodepoint(
-		rl.GetFontDefault(),
-		rune(arrow[0]),
-		[2]f32 {
-			arrow_box.x + (arrow_box.width - measured_arrow.x) / 2.0,
-			arrow_box.y + (arrow_box.height - measured_arrow.y) / 2.0 - CST_GUI_THICKNESS * 2.0,
-		},
-		TOP_SEL_OPT_FONT_SIZE,
-		rl.WHITE,
-	)
+	__draw_arrow(s)
 }
 
 
-obj_top_selector_get_options_sizes :: proc(s: ^Top_Selector) -> [2]f32 {
-	width: f32 = 0.0
-	height: f32 = -1.0
+obj_top_selector_get_options_size :: proc(s: ^Top_Selector) -> [2]f32 {
+	width, height: f32 = 0.0, -1.0
+
 	for option in s.options {
-		size := obj_top_selector_option_get_boxsize(option)
+		size := obj_top_selector_option_get_size(option)
 		width += size.x
 		height = max(height, size.y)
 	}
@@ -112,9 +84,41 @@ obj_top_selector_get_options_sizes :: proc(s: ^Top_Selector) -> [2]f32 {
 	return {width, height}
 }
 
+obj_top_selector_get_size :: proc(s: ^Top_Selector) -> [2]f32 {
+	return obj_top_selector_get_options_size(s) + TOP_SEL_PADDING + CST_GUI_THICKNESS
+}
+
+
+@(private = "file")
+__draw_arrow :: proc(s: ^Top_Selector) {
+	ts_size := obj_top_selector_get_size(s)
+	text_size := __measure_text(TOP_SEL_ARROW)
+	size := text_size + TOP_SEL_OPT_PADDING + CST_GUI_THICKNESS
+	text_startpos := (size - text_size) / 2.0
+
+	pos := s._pos + {(ts_size.x - size.x) / 2.0, ts_size.y - CST_GUI_THICKNESS}
+
+	s.arrow_hitbox.rect.xy = pos + CST_GUI_THICKNESS_HALF
+
+	rect := transmute(rl.Rectangle){pos.x, pos.y, size.x, size.y}
+
+	rl.DrawRectangleRec(rect, rl.BLACK)
+	rl.DrawRectangleLinesEx(rect, CST_GUI_THICKNESS, rl.WHITE)
+	rl.DrawTextEx(
+		rl.GetFontDefault(),
+		strings.clone_to_cstring(TOP_SEL_ARROW, context.temp_allocator),
+		pos + text_startpos,
+		TOP_SEL_OPT_FONT_SIZE,
+		TOP_SEL_OPT_FONT_SPACING,
+		rl.WHITE,
+	)
+	obj_hitbox_queue_debug_draw(s.arrow_hitbox)
+}
+
 
 // ---
 
+TOP_SEL_OPT_PADDING :: [2]f32{10.0, 10.0}
 TOP_SEL_OPT_FONT_SIZE :: 12
 TOP_SEL_OPT_FONT_SPACING :: 1
 
@@ -135,7 +139,9 @@ obj_top_selector_option_create :: proc(desc: Top_Selector_Option_Desc) -> ^Top_S
 
 	option.title = desc.title
 	option.color = desc.color
-	option.hitbox = obj_hitbox_create()
+
+	option_textsize := __measure_text(option.title) + TOP_SEL_OPT_PADDING
+	option.hitbox = obj_hitbox_create({0.0, 0.0, option_textsize.x, option_textsize.y})
 
 	return option
 }
@@ -148,34 +154,38 @@ obj_top_selector_option_destroy :: proc(o: ^Top_Selector_Option) {
 
 
 obj_top_selector_option_draw :: proc(o: ^Top_Selector_Option, pos: [2]f32) {
-	boxsize := obj_top_selector_option_get_boxsize(o)
-	textsize := obj_top_selector_option_get_textsize(o)
-	rect := rl.Rectangle{pos.x, pos.y, boxsize.x, boxsize.y}
+	o.hitbox.rect.xy = pos + CST_GUI_THICKNESS_HALF
 
-	rl.DrawRectangleRec(rect, rl.ColorBrightness(o.color, -0.32))
+	size := obj_top_selector_option_get_size(o)
+	text_size := __measure_text(o.title)
+	text_startpos := (size - text_size) / 2
+	rect := transmute(rl.Rectangle)[4]f32{pos.x, pos.y, size.x, size.y}
+
+	rl.DrawRectangleRec(rect, rl.ColorBrightness(o.color, -0.67))
 	rl.DrawRectangleLinesEx(rect, CST_GUI_THICKNESS, rl.WHITE)
 	rl.DrawTextEx(
 		rl.GetFontDefault(),
 		strings.clone_to_cstring(o.title, context.temp_allocator),
-		pos + boxsize / 2 - textsize / 2,
+		pos + text_startpos,
 		TOP_SEL_OPT_FONT_SIZE,
 		TOP_SEL_OPT_FONT_SPACING,
 		rl.WHITE,
 	)
+
+	obj_hitbox_queue_debug_draw(o.hitbox)
+}
+
+obj_top_selector_option_get_size :: proc(o: ^Top_Selector_Option) -> [2]f32 {
+	return __measure_text(o.title) + TOP_SEL_OPT_PADDING + CST_GUI_THICKNESS
 }
 
 
-obj_top_selector_option_get_textsize :: proc(o: ^Top_Selector_Option) -> [2]f32 {
+@(private = "file")
+__measure_text :: proc(s: string) -> [2]f32 {
 	return rl.MeasureTextEx(
 		rl.GetFontDefault(),
-		strings.clone_to_cstring(o.title, context.temp_allocator),
+		strings.clone_to_cstring(s, context.temp_allocator),
 		TOP_SEL_OPT_FONT_SIZE,
 		TOP_SEL_OPT_FONT_SPACING,
 	)
-}
-
-obj_top_selector_option_get_boxsize :: proc(o: ^Top_Selector_Option) -> [2]f32 {
-	PADDING :: [2]f32{16.0, 16.0}
-
-	return obj_top_selector_option_get_textsize(o) + PADDING
 }
