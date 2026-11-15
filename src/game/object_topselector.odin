@@ -1,6 +1,6 @@
 package game
 
-import "core:strings"
+import "core:math"
 
 import "utils"
 
@@ -10,6 +10,7 @@ import rl "vendor:raylib"
 TOP_SEL_PADDING :: [2]f32{20.0, 20.0}
 TOP_SEL_SPACING: f32 : 10.0
 TOP_SEL_ARROW :: "    V    V    V    "
+TOP_SEL_Y_LERP_TIME :: 26.78
 
 
 Top_Selector_Option_Desc ::  /* desc */struct {
@@ -22,6 +23,7 @@ Top_Selector ::  /* heavy */struct {
 	arrow:   ^Button,
 
 	// internal
+	_shown:  bool,
 	_pos:    [2]f32,
 }
 
@@ -33,6 +35,8 @@ obj_top_selector_create :: proc(option_descs: []Top_Selector_Option_Desc) -> ^To
 		append(&selector.options, obj_button_create(option_desc.title, option_desc.color))
 	}
 	selector.arrow = obj_button_create(TOP_SEL_ARROW)
+
+	selector._shown = true
 
 	return selector
 }
@@ -51,8 +55,12 @@ obj_top_selector_destroy :: proc(s: ^Top_Selector) {
 obj_top_selector_process :: proc(s: ^Top_Selector) {
 	if s._pos == {} || rl.IsWindowResized() {
 		s._pos.x = (utils.window_size(true) / 2.0 - obj_top_selector_get_size(s) / 2.0).x
-		s._pos.y = 0.0
 	}
+
+	if rl.IsKeyPressed(.TAB) do s._shown = !s._shown // TODO: remove from here
+
+	target_y := s._shown ? 0 : -obj_top_selector_get_size(s).y
+	s._pos.y = math.lerp(s._pos.y, target_y, TOP_SEL_Y_LERP_TIME * rl.GetFrameTime())
 
 	options_startpos := s._pos + obj_top_selector_get_padding() / 2.0
 	for &option in s.options {
@@ -63,7 +71,7 @@ obj_top_selector_process :: proc(s: ^Top_Selector) {
 	size := obj_top_selector_get_size(s)
 	arrow_startpos := [2]f32 {
 		s._pos.x + (size.x - obj_button_get_size(s.arrow)).x / 2.0,
-		size.y - CST_GUI_THICKNESS * 2,
+		s._pos.y + size.y - CST_GUI_THICKNESS * 2,
 	}
 	pos_(s.arrow, arrow_startpos)
 }
