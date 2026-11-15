@@ -36,12 +36,12 @@ scene_main_create :: proc() -> ^Scene {
 
 	scene.obj_top_selector = obj_top_selector_create(
 		{
-			{title = "wire", color = rl.LIGHTGRAY},
-			{title = "not", color = rl.RED},
-			{title = "and", color = rl.LIME},
-			{title = "or", color = rl.YELLOW},
-			{title = "xor", color = rl.ORANGE},
-			{title = "battery", color = rl.PURPLE},
+			{"wire", rl.LIGHTGRAY},
+			{"not", rl.RED},
+			{"and", rl.LIME},
+			{"or", rl.YELLOW},
+			{"xor", rl.ORANGE},
+			{"battery", rl.PURPLE},
 		},
 	)
 
