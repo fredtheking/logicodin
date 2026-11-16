@@ -9,7 +9,8 @@ import rl "vendor:raylib"
 
 TOP_SEL_PADDING :: [2]f32{20.0, 20.0}
 TOP_SEL_SPACING: f32 : 10.0
-TOP_SEL_ARROW :: "    V    V    V    "
+TOP_SEL_ARROW_DOWN :: "    v    DN    v    "
+TOP_SEL_ARROW_UP :: "    ^    UP    ^    "
 TOP_SEL_Y_LERP_TIME :: 26.78
 
 
@@ -34,7 +35,7 @@ obj_top_selector_create :: proc(option_descs: []Top_Selector_Option_Desc) -> ^To
 	for option_desc in option_descs {
 		append(&selector.options, obj_button_create(option_desc.title, option_desc.color))
 	}
-	selector.arrow = obj_button_create(TOP_SEL_ARROW)
+	selector.arrow = obj_button_create(TOP_SEL_ARROW_UP)
 
 	selector._shown = true
 
@@ -57,10 +58,13 @@ obj_top_selector_process :: proc(s: ^Top_Selector) {
 		s._pos.x = (utils.window_size(true) / 2.0 - obj_top_selector_get_size(s) / 2.0).x
 	}
 
-	if rl.IsKeyPressed(.TAB) do s._shown = !s._shown // TODO: remove from here
-
 	target_y := s._shown ? 0 : -obj_top_selector_get_size(s).y
 	s._pos.y = math.lerp(s._pos.y, target_y, TOP_SEL_Y_LERP_TIME * rl.GetFrameTime())
+	s.arrow.title = s._shown ? TOP_SEL_ARROW_UP : TOP_SEL_ARROW_DOWN
+
+	if game_get_singleton().inputter.pressed[.LEFT] {
+		s._shown = !s._shown
+	}
 
 	options_startpos := s._pos + obj_top_selector_get_padding() / 2.0
 	for &option in s.options {

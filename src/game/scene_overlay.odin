@@ -53,6 +53,7 @@ scene_overlay_draw :: proc(s: ^Scene) {
 	scene := cast(^SceneOverlay)s
 
 	if !game_is_debug() do return
+	g := game_get_singleton()
 
 	rl.DrawFPS(10, 10)
 	rl.DrawText(
@@ -61,5 +62,20 @@ scene_overlay_draw :: proc(s: ^Scene) {
 		30,
 		20,
 		rl.BLUE,
+	)
+
+	rl.DrawText(
+		fmt.ctprintf(
+			"ptr: (%p), down: (%t), pressed: (%t)\nui_c: (%d), world_c: (%d)",
+			g.inputter.target,
+			g.inputter.down[.LEFT],
+			g.inputter.pressed[.LEFT],
+			g.inputter._hitbox_stack_len,
+			g.inputter._hitbox_world_stack_len,
+		),
+		10,
+		60,
+		20,
+		rl.RED,
 	)
 }

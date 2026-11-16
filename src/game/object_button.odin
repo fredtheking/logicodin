@@ -4,7 +4,7 @@ import "core:strings"
 import rl "vendor:raylib"
 
 BUTTON_FONT_SIZE :: 16
-BUTTON_FONT_SPACING :: 1
+BUTTON_FONT_SPACING :: 2
 BUTTON_FONT_PADDING :: [2]f32{16.0, 16.0}
 
 
@@ -58,6 +58,7 @@ obj_button_draw :: proc(b: ^Button) {
 		rl.WHITE,
 	)
 	obj_hitbox_queue_debug_draw(b.hitbox)
+	obj_hitbox_advance(b.hitbox)
 }
 
 

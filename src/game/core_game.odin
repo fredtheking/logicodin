@@ -139,6 +139,9 @@ game_run :: proc(start_scene_tid: typeid) {
 		__draw()
 		deferred_flush(&g._debug_draw_ops, g, __drawdebug_deferred_flush)
 		rl.EndDrawing()
+
+		// post-process
+		__post_process()
 		free_all(context.temp_allocator)
 	}
 	log.info("runtime ended")
@@ -279,6 +282,13 @@ __draw :: proc() {
 
 	director_draw_current(g.director)
 	director_draw_overlay(g.director)
+}
+
+@(private = "file")
+__post_process :: proc() {
+	g := game_get_singleton()
+
+	inputter_post_process(g.inputter)
 }
 
 @(private = "file")
